@@ -1,0 +1,14 @@
+upstream/
+tools/
+build/
+dist/
+backups/
+**/bin/
+**/obj/
+*.user
+release/
+auth.json
+snapshot.ini
+settings.json
+*.log
+.vs/

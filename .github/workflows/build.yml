@@ -1,0 +1,36 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: Install portable Zig
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1
+      - name: Build
+        shell: pwsh
+        run: ./scripts/build.ps1
+      - name: Test quota and native plugin
+        shell: pwsh
+        run: dotnet run --project tests/Tests.csproj -- dist/CodexQuota.dll
+      - name: Test configuration edits
+        shell: pwsh
+        run: ./tests/config-tests.ps1
+      - name: Package
+        shell: pwsh
+        run: ./scripts/package.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CodexQuota-win-x64
+          path: |
+            release/*.zip
+            release/*.sha256

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../src/QuotaBridge/Quota.cs" Link="Quota.cs" />
+    <Compile Include="../src/QuotaBridge/RefreshSettings.cs" Link="RefreshSettings.cs" />
+    <Compile Include="../src/QuotaBridge/PluginSettings.cs" Link="PluginSettings.cs" />
+    <Compile Include="../src/QuotaBridge/RetryPolicy.cs" Link="RetryPolicy.cs" />
+  </ItemGroup>
+</Project>
