@@ -42,16 +42,28 @@ public static class Snapshot
             if (!usable || w is null || w.ResetAt <= now.ToUnixTimeSeconds()) return "--";
             var value = settings.ShowUsed ? w.Used : 100 - w.Used;
             var factor = settings.DecimalPlaces == 1 ? 10.0 : 1.0;
+            // Match the visible remaining precision, including values rounded down to zero.
+            if (Math.Floor((100 - w.Used) * factor) == 0)
+                return DateTimeOffset.FromUnixTimeSeconds(w.ResetAt).ToLocalTime()
+                    .ToString("MM/dd HH:mm", CultureInfo.InvariantCulture) + (fresh ? "" : "*");
             value = (settings.ShowUsed ? Math.Ceiling(value * factor) : Math.Floor(value * factor)) / factor;
             return value.ToString(settings.DecimalPlaces == 1 ? "F1" : "F0", CultureInfo.InvariantCulture) + "%" + (fresh ? "" : "*");
         }
-        string Reset(Window? w) => w is null ? "unavailable" : DateTimeOffset.FromUnixTimeSeconds(w.ResetAt).ToLocalTime().ToString("MM-dd HH:mm");
+        string Reset(Window? w) {
+            if (!usable || w is null || w.ResetAt <= now.ToUnixTimeSeconds()) return "--";
+            var reset = DateTimeOffset.FromUnixTimeSeconds(w.ResetAt);
+            var minutes = (long)Math.Ceiling((reset - now).TotalMinutes);
+            var days = minutes / 1440;
+            var hours = minutes % 1440 / 60;
+            var remaining = days > 0 ? $"{days}d {hours}h {minutes % 60}m" : $"{hours}h {minutes % 60}m";
+            return $"{remaining} ({reset.ToLocalTime().ToString("MM/dd HH:mm", CultureInfo.InvariantCulture)})";
+        }
         var deadline = usable ? quota!.FetchedAt.AddMinutes(settings.CacheMinutes).ToUnixTimeSeconds() : 0;
         // Each window has its own deadline; a reset must never leave a misleading old value.
         var fiveDeadline = quota?.FiveHour is {} a ? Math.Min(deadline, a.ResetAt) : 0;
         var weekDeadline = quota?.Weekly is {} b ? Math.Min(deadline, b.ResetAt) : 0;
-        var tooltip = $"Codex {(settings.ShowUsed ? "已用" : "剩余")}额度 | {status} | 5h 重置: {Reset(quota?.FiveHour)} | 7d 重置: {Reset(quota?.Weekly)} | 更新: {quota?.FetchedAt.ToLocalTime().ToString("HH:mm:ss") ?? "尚未成功"}";
-        return $"[quota]\nfive={Value(quota?.FiveHour)}\nweekly={Value(quota?.Weekly)}\nfive_until={fiveDeadline}\nweekly_until={weekDeadline}\ntooltip={tooltip}\n";
+        var tooltip = $"5h: {Reset(quota?.FiveHour)} | Weekly: {Reset(quota?.Weekly)}";
+        return $"[quota]\nfive={Value(quota?.FiveHour)}\nweekly={Value(quota?.Weekly)}\nfive_until={fiveDeadline}\nweekly_until={weekDeadline}\ntooltip={tooltip}\nstatus={status}\n";
     }
 
     public static void Write(string path, string content)

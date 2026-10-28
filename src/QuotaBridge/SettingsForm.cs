@@ -74,7 +74,8 @@ public sealed class SettingsForm : Form
         try {
             var snapshot = Path.Combine(Path.GetDirectoryName(path)!, "snapshot.ini");
             var lines = File.ReadAllLines(snapshot);
-            var text = lines.FirstOrDefault(l => l.StartsWith("tooltip="))?[8..];
+            var text = lines.FirstOrDefault(l => l.StartsWith("status="))?[7..]
+                ?? lines.FirstOrDefault(l => l.StartsWith("tooltip="))?[8..];
             status.Text = text ?? "等待后台首次刷新。";
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { status.Text = "等待后台首次刷新。"; }
     }

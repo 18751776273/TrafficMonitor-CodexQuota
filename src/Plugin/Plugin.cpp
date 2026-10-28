@@ -96,7 +96,7 @@ public:
     const wchar_t* GetItemId() const override { return weekly ? L"CodexQuota.7d" : L"CodexQuota.5h"; }
     const wchar_t* GetItemLableText() const override { return weekly ? L"7d: " : L"5h: "; }
     const wchar_t* GetItemValueText() const override { Lock guard; copy(displayValue, value, 16); return displayValue; }
-    const wchar_t* GetItemValueSampleText() const override { return L"100.0%*"; }
+    const wchar_t* GetItemValueSampleText() const override { return L"88/88 88:88*"; }
     void Read(unsigned long long now) {
         Lock guard;
         wchar_t until[32];

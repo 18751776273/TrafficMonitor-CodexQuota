@@ -95,12 +95,15 @@ try
         if (!once)
         {
             var elapsed = Stopwatch.StartNew();
+            var displayMinute = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 60;
             while (!lifetime.IsCancellationRequested)
             {
                 var nextSettings = PluginSettings.Read(settingsPath, settings);
-                if (nextSettings != settings)
+                var currentMinute = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 60;
+                if (nextSettings != settings || currentMinute != displayMinute)
                 {
                     settings = nextSettings;
+                    displayMinute = currentMinute;
                     Snapshot.Write(snapshotPath, Snapshot.Format(last, fresh, Status(), DateTimeOffset.UtcNow, settings));
                 }
                 // Config edits cannot shorten the server's retry delay or failure backoff.

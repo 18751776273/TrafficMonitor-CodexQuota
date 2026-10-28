@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Replace each taskbar quota percentage with its local reset date and time when
+  the remaining quota rounds down to zero at the selected precision.
+- Reserve enough taskbar width for reset times, including the stale marker.
+- Preserve reset-only hover details with a countdown updated every minute;
+  connection status remains available in the settings window.
+
 ## 0.2.0
 
 First public release.

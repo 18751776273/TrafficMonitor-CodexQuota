@@ -20,6 +20,37 @@ Check(Snapshot.Format(q, false, "offline", now).Contains("five=95%*"), "Network 
 Check(Snapshot.Format(q, false, "offline", now.AddMinutes(11)).Contains("five=--"), "Old cache is unavailable");
 Check(Snapshot.Format(null, false, "no login", now).Contains("five=--"), "No login never becomes 0%");
 
+var fiveReset = now.AddHours(3).ToUnixTimeSeconds();
+var weekReset = now.AddDays(4).ToUnixTimeSeconds();
+string ResetText(long reset) => DateTimeOffset.FromUnixTimeSeconds(reset).ToLocalTime().ToString("MM/dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+var fiveResetText = ResetText(fiveReset);
+var weekResetText = ResetText(weekReset);
+var exhaustedFive = new Quota(new Window(100, fiveReset), new Window(23, weekReset), now);
+var exhaustedWeek = new Quota(new Window(5, fiveReset), new Window(100, weekReset), now);
+var exhaustedBoth = new Quota(new Window(100, fiveReset), new Window(100, weekReset), now);
+var fiveSnapshot = Snapshot.Format(exhaustedFive, true, "ok", now);
+Check(fiveSnapshot.Contains($"five={fiveResetText}\n") && fiveSnapshot.Contains("weekly=77%\n"), "Only exhausted 5h switches to its local reset time");
+var weekSnapshot = Snapshot.Format(exhaustedWeek, true, "ok", now);
+Check(weekSnapshot.Contains("five=95%\n") && weekSnapshot.Contains($"weekly={weekResetText}\n"), "Only exhausted 7d switches to its own reset time");
+var bothSnapshot = Snapshot.Format(exhaustedBoth, false, "offline", now);
+Check(bothSnapshot.Contains($"five={fiveResetText}*\n") && bothSnapshot.Contains($"weekly={weekResetText}*\n"), "Both exhausted windows retain their own reset times and stale markers");
+foreach (var decimals in new[] { 0, 1 })
+{
+    var precision = new PluginSettings(DecimalPlaces: decimals);
+    var almostEmpty = new Quota(new Window(99.95, fiveReset), null, now);
+    Check(Snapshot.Format(almostEmpty, true, "ok", now, precision).Contains($"five={fiveResetText}\n"), "Remaining quota rounded to zero displays reset time");
+    Check(Snapshot.Format(exhaustedBoth, true, "ok", now, precision with { ShowUsed = true }).Contains($"weekly={weekResetText}\n"), "Exhausted quota displays reset time in used mode too");
+    var unused = new Quota(new Window(0, fiveReset), null, now);
+    Check(Snapshot.Format(unused, true, "ok", now, precision with { ShowUsed = true }).Contains(decimals == 0 ? "five=0%\n" : "five=0.0%\n"), "Zero used quota still displays a percentage");
+}
+var fractional = new Quota(new Window(99.5, fiveReset), null, now);
+Check(Snapshot.Format(fractional, true, "ok", now).Contains($"five={fiveResetText}\n"), "Integer remaining zero switches to reset time");
+Check(Snapshot.Format(fractional, true, "ok", now, new PluginSettings(DecimalPlaces: 1)).Contains("five=0.5%\n"), "Nonzero fractional remaining quota stays a percentage");
+Check(Snapshot.Format(exhaustedBoth, false, "offline", now.AddMinutes(11)).Contains("five=--\n"), "Expired cache never displays a reset time");
+var justReset = new Quota(new Window(100, now.AddSeconds(1).ToUnixTimeSeconds()), new Window(100, weekReset), now);
+var afterReset = Snapshot.Format(justReset, false, "offline", now.AddSeconds(2));
+Check(afterReset.Contains("five=--\n") && afterReset.Contains($"weekly={weekResetText}*\n"), "Reset invalidates only its own exhausted window");
+
 var settingsDir = Path.Combine(Path.GetTempPath(), "CodexQuota-settings-" + Guid.NewGuid().ToString("N"));
 var settingsPath = Path.Combine(settingsDir, "settings.json");
 try
@@ -55,7 +86,8 @@ try {
     File.WriteAllText(file, "{");
     Check(PluginSettings.Read(file, options) == options, "Partial settings write keeps previous values");
     Check(Snapshot.Format(q, true, "ok", now, options).Contains("five=4.5%"), "Used percentage and one decimal applied");
-    Check(Snapshot.Format(q, true, "ok", now, options).Contains("Codex 已用额度"), "Tooltip explains displayed meaning");
+    var tooltip = Snapshot.Format(q, true, "ok", now, options).Split('\n').Single(l => l.StartsWith("tooltip="));
+    Check(tooltip.StartsWith("tooltip=5h: ") && tooltip.Contains(" | Weekly: ") && !tooltip.Contains('%') && !tooltip.Contains("ok"), "Tooltip contains reset times only");
     Check(Snapshot.Format(q, false, "offline", now.AddMinutes(15), options).Contains("five=4.5%*"), "Configured cache lifetime respected");
     Check(Snapshot.Format(q, false, "offline", now.AddMinutes(31), options).Contains("five=--"), "Configured cache expires");
     var resetQuota = new Quota(new Window(5, now.AddMinutes(1).ToUnixTimeSeconds()), null, now);
@@ -92,6 +124,19 @@ if (args.Length > 0)
         Snapshot.Write(Path.Combine(folder, "snapshot.ini"), Snapshot.Format(q, false, "offline", now));
         refresh(instance);
         Check(S(five, 3) == "95%*", "Native plugin displays stale marker");
+        Snapshot.Write(Path.Combine(folder, "snapshot.ini"), fiveSnapshot);
+        refresh(instance);
+        Check(S(five, 3) == fiveResetText && S(week, 3) == "77%", "Native plugin displays the exhausted 5h reset time");
+        Snapshot.Write(Path.Combine(folder, "snapshot.ini"), weekSnapshot);
+        refresh(instance);
+        Check(S(five, 3) == "95%" && S(week, 3) == weekResetText, "Native plugin displays the exhausted 7d reset time");
+        Snapshot.Write(Path.Combine(folder, "snapshot.ini"), bothSnapshot);
+        refresh(instance);
+        Check(S(five, 3) == fiveResetText + "*" && S(week, 3) == weekResetText + "*", "Native buffers preserve both full reset times and stale markers");
+        Check(S(five, 4) == "88/88 88:88*" && S(week, 4) == "88/88 88:88*", "Taskbar reserves width for full reset times");
+        Snapshot.Write(Path.Combine(folder, "snapshot.ini"), Snapshot.Format(q, true, "recovered", now));
+        refresh(instance);
+        Check(S(five, 3) == "95%" && S(week, 3) == "77%", "Native plugin returns to percentages after quota recovers");
         Snapshot.Write(Path.Combine(folder, "snapshot.ini"), "[quota]\nfive=99%\nfive_until=1\nweekly=55%\nweekly_until=1\n");
         refresh(instance);
         Check(S(five, 3) == "--" && S(week, 3) == "--", "Native plugin rejects expired cached values independently of worker");
